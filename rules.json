@@ -1,0 +1,226 @@
+{
+  "version": "6.1.0",
+  "lastUpdated": "2025-12-20",
+  "description": "PhishGuard detection rules and configuration database",
+  
+  "suspiciousTLDs": {
+    "high_risk": [
+      "tk", "ml", "ga", "cf", "gq", "xyz", "top", "work", "click",
+      "link", "racing", "loan", "download", "stream", "party", "review",
+      "science", "country", "kim", "cricket", "faith", "win", "bid",
+      "vip", "ren", "accountant", "date", "trade", "webcam", "men"
+    ],
+    "medium_risk": [
+      "info", "biz", "cc", "ws", "mobi", "name", "pro", "asia",
+      "tel", "travel", "xxx", "pw", "club", "online", "site", "website"
+    ],
+    "notes": "TLDs commonly used in phishing campaigns due to low cost and lax verification"
+  },
+  
+  "trustedBrands": {
+    "financial": [
+      "paypal", "stripe", "square", "venmo", "cashapp",
+      "chase", "wellsfargo", "bankofamerica", "citibank", "usbank",
+      "capitalone", "amex", "discover", "visa", "mastercard"
+    ],
+    "technology": [
+      "google", "microsoft", "apple", "amazon", "facebook", "meta",
+      "twitter", "x", "linkedin", "github", "gitlab", "stackoverflow",
+      "reddit", "discord", "slack", "zoom", "dropbox", "box"
+    ],
+    "ecommerce": [
+      "amazon", "ebay", "walmart", "target", "bestbuy", "aliexpress",
+      "etsy", "shopify", "wayfair", "costco", "homedepot", "lowes"
+    ],
+    "social_media": [
+      "facebook", "instagram", "twitter", "tiktok", "snapchat",
+      "pinterest", "tumblr", "whatsapp", "telegram", "signal"
+    ],
+    "streaming": [
+      "netflix", "hulu", "disney", "hbo", "spotify", "youtube",
+      "twitch", "paramount", "peacock", "appletv", "primevideo"
+    ],
+    "crypto": [
+      "coinbase", "binance", "kraken", "gemini", "blockchain",
+      "metamask", "uniswap", "opensea", "crypto"
+    ],
+    "gaming": [
+      "steam", "epicgames", "ea", "blizzard", "ubisoft", "nintendo",
+      "playstation", "xbox", "roblox", "minecraft"
+    ],
+    "notes": "Legitimate brand names frequently targeted for impersonation"
+  },
+  
+  "suspiciousKeywords": {
+    "urgent_action": [
+      "verify", "confirm", "urgent", "immediately", "action-required",
+      "expire", "suspended", "locked", "limited", "unusual"
+    ],
+    "authentication": [
+      "login", "signin", "authenticate", "validation", "security",
+      "account", "password", "credentials", "verification"
+    ],
+    "financial": [
+      "banking", "payment", "transaction", "wallet", "billing",
+      "invoice", "refund", "prize", "winner", "claim"
+    ],
+    "security_alerts": [
+      "alert", "warning", "notification", "activity", "detected",
+      "breach", "compromised", "unauthorized", "suspicious"
+    ],
+    "social_engineering": [
+      "update", "restore", "recover", "reset", "unlock", "reactivate",
+      "confirm-identity", "verify-account", "secure-account"
+    ],
+    "notes": "Keywords commonly used in phishing URLs and content"
+  },
+  
+  "urlShorteners": [
+    "bit.ly", "tinyurl.com", "goo.gl", "t.co", "ow.ly", "is.gd",
+    "buff.ly", "adf.ly", "bl.ink", "lnkd.in", "shorte.st", "mcaf.ee",
+    "su.pr", "bc.vc", "youtu.be", "j.mp", "tr.im", "cli.gs",
+    "tiny.cc", "url.ie", "x.co", "prettylinkpro.com", "scrnch.me",
+    "filoops.info", "vurl.com", "2.gp", "twitthis.com", "htxt.it",
+    "budurl.com", "short.ie", "win.gs", "atu.ca", "rb.gy"
+  ],
+  
+  "homographCharacters": {
+    "description": "Characters that look similar but are from different alphabets (IDN homograph attacks)",
+    "cyrillic": {
+      "а": "a", "е": "e", "о": "o", "р": "p", "с": "c",
+      "х": "x", "у": "y", "і": "i", "ј": "j", "ѕ": "s"
+    },
+    "greek": {
+      "α": "a", "β": "b", "ε": "e", "ι": "i", "ο": "o",
+      "ρ": "p", "τ": "t", "υ": "y", "χ": "x"
+    },
+    "notes": "Used to create visually identical but technically different domain names"
+  },
+  
+  "scoreWeights": {
+    "critical": {
+      "min": 50,
+      "examples": [
+        "Login form on HTTP",
+        "Listed in phishing databases",
+        "Typosquatting (1 character difference)",
+        "IDN homograph attack"
+      ]
+    },
+    "high": {
+      "min": 25,
+      "max": 49,
+      "examples": [
+        "IP address instead of domain",
+        "Brand impersonation",
+        "External form submission",
+        "High domain entropy"
+      ]
+    },
+    "medium": {
+      "min": 10,
+      "max": 24,
+      "examples": [
+        "Suspicious TLD",
+        "URL shortener",
+        "Excessive subdomains",
+        "Non-standard port"
+      ]
+    },
+    "low": {
+      "min": 1,
+      "max": 9,
+      "examples": [
+        "Long domain name",
+        "Excessive special characters",
+        "External favicon"
+      ]
+    }
+  },
+  
+  "whitelist": {
+    "description": "Domains that should never be flagged (user-configurable)",
+    "default": [],
+    "notes": "Users can add trusted domains through the extension UI"
+  },
+  
+  "blacklist": {
+    "description": "Domains that should always be flagged (user-configurable)",
+    "default": [],
+    "notes": "Users can add known malicious domains through the extension UI"
+  },
+  
+  "regexPatterns": {
+    "ipv4": "^(\\d{1,3}\\.){3}\\d{1,3}$",
+    "ipv6": "^([0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}$",
+    "suspiciousChars": "[\\-_]{3,}",
+    "excessiveDigits": "\\d{5,}",
+    "dataUri": "^data:",
+    "notes": "Regular expressions for pattern matching"
+  },
+  
+  "apiEndpoints": {
+    "phishtank": {
+      "url": "https://checkurl.phishtank.com/checkurl/",
+      "method": "POST",
+      "requiresKey": true,
+      "documentation": "https://www.phishtank.com/api_info.php"
+    },
+    "googleSafeBrowsing": {
+      "url": "https://safebrowsing.googleapis.com/v4/threatMatches:find",
+      "method": "POST",
+      "requiresKey": true,
+      "documentation": "https://developers.google.com/safe-browsing/v4"
+    },
+    "virusTotal": {
+      "url": "https://www.virustotal.com/vtapi/v2/url/report",
+      "method": "GET",
+      "requiresKey": true,
+      "documentation": "https://developers.virustotal.com/reference",
+      "notes": "Optional future integration"
+    }
+  },
+  
+  "configuration": {
+    "autoScan": true,
+    "scanDelay": 1000,
+    "cacheExpiry": 300000,
+    "apiTimeout": 5000,
+    "maxReasons": 20,
+    "enableNotifications": false,
+    "notes": "Default configuration values (in milliseconds where applicable)"
+  },
+  
+  "thresholds": {
+    "safe": {
+      "max": 24,
+      "color": "#00ff9d",
+      "badge": ""
+    },
+    "suspicious": {
+      "min": 25,
+      "max": 49,
+      "color": "#fcee0a",
+      "badge": "!"
+    },
+    "dangerous": {
+      "min": 50,
+      "max": 74,
+      "color": "#ff003c",
+      "badge": "!!"
+    },
+    "critical": {
+      "min": 75,
+      "color": "#ff0000",
+      "badge": "!!!"
+    }
+  },
+  
+  "metadata": {
+    "author": "PhishGuard Team",
+    "license": "MIT",
+    "repository": "https://github.com/yourusername/phishguard",
+    "supportEmail": "support@phishguard.example.com",
+    "updateUrl": "https://api.phishguard.example.com/rules/latest.json"
+  }
+}

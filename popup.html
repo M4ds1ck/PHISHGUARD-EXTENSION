@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PhishGuard</title>
+    <style>
+        :root {
+            --bg: #030508;
+            --panel: #0d1117;
+            --panel-light: #161b22;
+            --neon-blue: #00f3ff;
+            --neon-green: #00ff9d;
+            --neon-red: #ff003c;
+            --neon-yellow: #fcee0a;
+            --neon-orange: #ffb300;
+            --text: #e6edf3;
+            --text-dim: #7d8590;
+            --border: rgba(255,255,255,0.1);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            width: 400px;
+            max-height: 650px;
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            overflow-x: hidden;
+            overflow-y: auto;
+        }
+
+        /* Scanline effect */
+        .scanline {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(to bottom, transparent 50%, rgba(0,0,0,0.1) 50%);
+            background-size: 100% 4px;
+            pointer-events: none;
+            z-index: 1000;
+            opacity: 0.3;
+        }
+
+        /* Header */
+        header {
+            padding: 16px 20px;
+            background: rgba(13,17,23,0.95);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            backdrop-filter: blur(10px);
+        }
+
+        .logo {
+            font-size: 14px;
+            font-weight: 700;
+            letter-spacing: 1.5px;
+            color: var(--neon-blue);
+            text-shadow: 0 0 10px rgba(0,243,255,0.5);
+        }
+
+        .version {
+            font-size: 9px;
+            color: var(--text-dim);
+            letter-spacing: 1px;
+        }
+
+        /* Radar Box */
+        .radar-container {
+            position: relative;
+            height: 240px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            overflow: hidden;
+        }
+
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0.8;
+        }
+
+        .score-display {
+            position: relative;
+            z-index: 10;
+            text-align: center;
+        }
+
+        .score-big {
+            font-size: 64px;
+            font-weight: 900;
+            line-height: 1;
+            text-shadow: 0 0 30px currentColor;
+            font-family: 'Courier New', monospace;
+        }
+
+        .status-badge {
+            margin-top: 12px;
+            padding: 6px 16px;
+            background: rgba(0,0,0,0.7);
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 2px;
+            border: 1px solid currentColor;
+            display: inline-block;
+        }
+
+        /* URL Display */
+        .url-display {
+            padding: 12px 20px;
+            background: var(--panel);
+            border-bottom: 1px solid var(--border);
+            font-size: 11px;
+            color: var(--text-dim);
+            word-break: break-all;
+            max-height: 60px;
+            overflow-y: auto;
+        }
+
+        /* Action Buttons */
+        .actions {
+            display: flex;
+            gap: 8px;
+            padding: 12px 20px;
+            background: var(--panel-light);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .btn {
+            flex: 1;
+            padding: 8px 12px;
+            font-size: 11px;
+            font-weight: 600;
+            border: 1px solid var(--border);
+            background: var(--panel);
+            color: var(--text);
+            cursor: pointer;
+            transition: all 0.2s;
+            border-radius: 4px;
+            letter-spacing: 0.5px;
+        }
+
+        .btn:hover {
+            background: var(--panel-light);
+            border-color: var(--neon-blue);
+            box-shadow: 0 0 10px rgba(0,243,255,0.3);
+        }
+
+        .btn:active {
+            transform: scale(0.98);
+        }
+
+        .btn-rescan {
+            color: var(--neon-blue);
+        }
+
+        .btn-whitelist {
+            color: var(--neon-green);
+        }
+
+        .btn-blacklist {
+            color: var(--neon-red);
+        }
+
+        /* Info Section */
+        .info-section {
+            padding: 16px 20px;
+        }
+
+        .section-title {
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .section-title::before {
+            content: '';
+            width: 4px;
+            height: 12px;
+            background: var(--neon-blue);
+            border-radius: 2px;
+        }
+
+        /* Log Items */
+        .log-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .log-item {
+            padding: 10px 12px;
+            background: var(--panel);
+            border-left: 3px solid var(--neon-blue);
+            border-radius: 4px;
+            font-size: 12px;
+            transition: all 0.2s;
+        }
+
+        .log-item:hover {
+            background: var(--panel-light);
+            transform: translateX(2px);
+        }
+
+        .log-title {
+            font-weight: 600;
+            margin-bottom: 4px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .log-weight {
+            font-size: 10px;
+            padding: 2px 6px;
+            background: rgba(0,0,0,0.4);
+            border-radius: 3px;
+            color: var(--text-dim);
+        }
+
+        .log-detail {
+            font-size: 11px;
+            color: var(--text-dim);
+            margin-top: 4px;
+            line-height: 1.4;
+        }
+
+        /* Stats Section */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .stat-card {
+            padding: 12px;
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 24px;
+            font-weight: 900;
+            color: var(--neon-blue);
+            margin-bottom: 4px;
+        }
+
+        .stat-label {
+            font-size: 10px;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        /* Empty State */
+        .empty-state {
+            padding: 30px 20px;
+            text-align: center;
+            color: var(--text-dim);
+        }
+
+        .empty-icon {
+            font-size: 48px;
+            margin-bottom: 12px;
+            opacity: 0.3;
+        }
+
+        .empty-text {
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        /* Loading State */
+        .loading {
+            text-align: center;
+            padding: 40px 20px;
+            color: var(--text-dim);
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid var(--border);
+            border-top-color: var(--neon-blue);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 16px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Color States */
+        .state-safe .score-big,
+        .state-safe .status-badge {
+            color: var(--neon-green);
+        }
+
+        .state-warning .score-big,
+        .state-warning .status-badge {
+            color: var(--neon-yellow);
+        }
+
+        .state-danger .score-big,
+        .state-danger .status-badge {
+            color: var(--neon-red);
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--panel);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--border);
+            border-radius: 3px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--neon-blue);
+        }
+
+        /* Footer */
+        footer {
+            padding: 12px 20px;
+            text-align: center;
+            font-size: 10px;
+            color: var(--text-dim);
+            border-top: 1px solid var(--border);
+            background: var(--panel);
+        }
+    </style>
+</head>
+<body>
+    <div class="scanline"></div>
+
+    <header>
+        <div class="logo">⚡ PHISHGUARD</div>
+        <div class="version">v6.1.0</div>
+    </header>
+
+    <div class="radar-container" id="radarContainer">
+        <canvas id="radar"></canvas>
+        <div class="score-display">
+            <div class="score-big" id="score">--</div>
+            <div class="status-badge" id="status">INITIALIZING</div>
+        </div>
+    </div>
+
+    <div class="url-display" id="urlDisplay">
+        <span style="opacity: 0.5;">Target URL:</span> <span id="currentUrl">Loading...</span>
+    </div>
+
+    <div class="actions">
+        <button class="btn btn-rescan" id="rescanBtn" title="Re-scan this page">
+            ⟳ Rescan
+        </button>
+        <button class="btn btn-whitelist" id="whitelistBtn" title="Trust this domain">
+            ✓ Trust
+        </button>
+        <button class="btn btn-blacklist" id="blacklistBtn" title="Block this domain">
+            ✕ Block
+        </button>
+    </div>
+
+    <div class="info-section">
+        <div class="section-title">Detection Results</div>
+        <div class="log-list" id="logList">
+            <div class="loading">
+                <div class="spinner"></div>
+                <div>Analyzing security threats...</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="info-section" style="border-top: 1px solid var(--border); padding-top: 16px;">
+        <div class="section-title">Session Statistics</div>
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-value" id="statScanned">0</div>
+                <div class="stat-label">Sites Scanned</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="statBlocked">0</div>
+                <div class="stat-label">Threats Blocked</div>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        Protected by PhishGuard Advanced Threat Detection
+    </footer>
+
+    <script src="popup.js"></script>
+</body>
+</html>
