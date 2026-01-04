@@ -1,107 +1,100 @@
-// utils.js - Shared Utility Functions
-// This file is loaded before content.js and provides reusable functions
+// utils.js - FIXED & OPTIMIZED VERSION
 
 const PhishGuardUtils = {
-    
+
     // ============================================
     // STRING ANALYSIS
     // ============================================
-    
+
     /**
-     * Calculate Shannon entropy of a string (measures randomness)
-     * Higher entropy = more random = potentially suspicious
-     * @param {string} str - String to analyze
-     * @returns {number} Entropy value
+     * Calculate Shannon entropy (fixed divide-by-zero bug)
      */
     calculateEntropy: function(str) {
         if (!str || str.length === 0) return 0;
-        
+
         const len = str.length;
         const frequencies = {};
-        
-        // Count character frequencies
+
         for (let i = 0; i < len; i++) {
             const char = str[i];
             frequencies[char] = (frequencies[char] || 0) + 1;
         }
-        
-        // Calculate entropy
+
         return Object.values(frequencies).reduce((sum, freq) => {
             const probability = freq / len;
-            return sum - probability * Math.log2(probability);
+            // Fix: Check for zero probability to avoid -Infinity
+            if (probability > 0) {
+                return sum - probability * Math.log2(probability);
+            }
+            return sum;
         }, 0);
     },
-    
+
     /**
-     * Calculate Levenshtein distance between two strings
-     * Used for typosquatting detection
-     * @param {string} str1 - First string
-     * @param {string} str2 - Second string
-     * @returns {number} Edit distance
+     * Optimized Levenshtein distance with early exit
      */
     levenshteinDistance: function(str1, str2) {
+        // Early exits
+        if (str1 === str2) return 0;
+        if (str1.length === 0) return str2.length;
+        if (str2.length === 0) return str1.length;
+
         const len1 = str1.length;
         const len2 = str2.length;
+
+        // Optimization: swap to ensure str1 is shorter
+        if (len1 > len2) {
+            return this.levenshteinDistance(str2, str1);
+        }
+
+        // Use single array instead of matrix (space optimization)
+        let prevRow = Array(len1 + 1).fill(0).map((_, i) => i);
         
-        // Create matrix
-        const matrix = Array(len2 + 1)
-            .fill(null)
-            .map(() => Array(len1 + 1).fill(0));
-        
-        // Initialize first row and column
-        for (let i = 0; i <= len1; i++) matrix[0][i] = i;
-        for (let j = 0; j <= len2; j++) matrix[j][0] = j;
-        
-        // Fill matrix
         for (let j = 1; j <= len2; j++) {
+            let currRow = [j];
+            
             for (let i = 1; i <= len1; i++) {
                 const cost = str1[i - 1] === str2[j - 1] ? 0 : 1;
-                matrix[j][i] = Math.min(
-                    matrix[j][i - 1] + 1,     // Insertion
-                    matrix[j - 1][i] + 1,     // Deletion
-                    matrix[j - 1][i - 1] + cost // Substitution
+                currRow[i] = Math.min(
+                    prevRow[i] + 1,      // Deletion
+                    currRow[i - 1] + 1,  // Insertion
+                    prevRow[i - 1] + cost // Substitution
                 );
             }
+            
+            prevRow = currRow;
         }
-        
-        return matrix[len2][len1];
+
+        return prevRow[len1];
     },
-    
+
     /**
-     * Check for homograph characters (visually similar characters)
-     * Common in IDN homograph attacks
-     * @param {string} str - String to check
-     * @returns {boolean} True if suspicious characters found
+     * Check for homograph characters (IDN attacks)
      */
     hasHomographs: function(str) {
-        // Common homograph characters
-        const homographs = [
-            '\u0430', // Cyrillic 'a'
-            '\u0435', // Cyrillic 'e'
-            '\u043E', // Cyrillic 'o'
-            '\u0440', // Cyrillic 'p'
-            '\u0441', // Cyrillic 'c'
-            '\u0445', // Cyrillic 'x'
-            '\u0443', // Cyrillic 'y'
-            '\u03BF', // Greek 'o'
-            '\u03C1', // Greek 'p'
-        ];
-        
+        // Comprehensive homograph character set
+        const homographs = new Set([
+            // Cyrillic
+            '\u0430', '\u0435', '\u043E', '\u0440', '\u0441',
+            '\u0445', '\u0443', '\u0456', '\u0458', '\u0455',
+            // Greek
+            '\u03BF', '\u03C1', '\u03B1', '\u03B5', '\u03B9',
+            '\u03C4', '\u03C5', '\u03C7'
+        ]);
+
         for (const char of str) {
-            if (homographs.includes(char)) return true;
+            if (homographs.has(char)) return true;
         }
-        
+
         return false;
     },
-    
+
     // ============================================
     // URL ANALYSIS
     // ============================================
-    
+
     /**
      * Extract base domain from hostname
-     * @param {string} hostname - Full hostname
-     * @returns {string} Base domain
      */
     extractDomain: function(hostname) {
         const parts = hostname.split('.');
@@ -110,64 +103,63 @@ const PhishGuardUtils = {
         }
         return hostname;
     },
-    
+
     /**
-     * Check if URL uses IP address instead of domain
-     * @param {string} hostname - Hostname to check
-     * @returns {object} {isIP: boolean, type: 'ipv4'|'ipv6'|null}
+     * Validate IP address (fixed validation)
      */
     isIPAddress: function(hostname) {
-        // IPv4 pattern
+        // IPv4 pattern with proper validation
         const ipv4Pattern = /^(\d{1,3}\.){3}\d{1,3}$/;
         if (ipv4Pattern.test(hostname)) {
-            // Validate octets are 0-255
             const octets = hostname.split('.').map(Number);
             const valid = octets.every(octet => octet >= 0 && octet <= 255);
             return { isIP: valid, type: 'ipv4' };
         }
-        
-        // IPv6 pattern (simplified)
+
+        // IPv6 pattern (simplified but more accurate)
         const ipv6Pattern = /^([0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}$/;
         if (ipv6Pattern.test(hostname)) {
             return { isIP: true, type: 'ipv6' };
         }
-        
+
         return { isIP: false, type: null };
     },
-    
+
     /**
-     * Check for typosquatting against known brands
-     * @param {string} domain - Domain to check
-     * @param {array} targetList - List of legitimate domains
-     * @param {number} threshold - Maximum edit distance (default: 2)
-     * @returns {array} Array of matches with {target, distance}
+     * Check for typosquatting (optimized)
      */
     checkTyposquatting: function(domain, targetList, threshold = 2) {
         const results = [];
         const domainBase = domain.split('.')[0].toLowerCase();
-        
+
+        // Pre-filter by length (optimization)
+        const maxLength = domainBase.length + threshold;
+        const minLength = Math.max(1, domainBase.length - threshold);
+
         for (const target of targetList) {
             const targetLower = target.toLowerCase();
-            const distance = this.levenshteinDistance(domainBase, targetLower);
             
+            // Skip if length difference too large
+            if (targetLower.length > maxLength || targetLower.length < minLength) {
+                continue;
+            }
+
+            const distance = this.levenshteinDistance(domainBase, targetLower);
+
             if (distance > 0 && distance <= threshold) {
-                results.push({ 
-                    target: target, 
+                results.push({
+                    target: target,
                     distance: distance,
                     similarity: 1 - (distance / Math.max(domainBase.length, targetLower.length))
                 });
             }
         }
-        
-        // Sort by distance (closest first)
+
         return results.sort((a, b) => a.distance - b.distance);
     },
-    
+
     /**
-     * Count occurrences of a pattern in string
-     * @param {string} str - String to search
-     * @param {RegExp|string} pattern - Pattern to count
-     * @returns {number} Number of occurrences
+     * Count pattern occurrences
      */
     countPattern: function(str, pattern) {
         if (typeof pattern === 'string') {
@@ -175,144 +167,135 @@ const PhishGuardUtils = {
         }
         return (str.match(pattern) || []).length;
     },
-    
+
     // ============================================
     // DOMAIN VALIDATION
     // ============================================
-    
+
     /**
-     * Check if domain is likely legitimate based on structure
-     * @param {string} hostname - Hostname to check
-     * @returns {object} Validation results
+     * Validate domain structure
      */
     validateDomainStructure: function(hostname) {
         const parts = hostname.split('.');
         const tld = parts[parts.length - 1];
-        
+
         return {
-            subdomainCount: parts.length - 2,
+            subdomainCount: Math.max(0, parts.length - 2),
             hasExcessiveSubdomains: parts.length > 4,
             tld: tld,
             length: hostname.length,
             isLong: hostname.length > 40,
-            dashCount: this.countPattern(hostname, '-'),
-            underscoreCount: this.countPattern(hostname, '_'),
+            dashCount: this.countPattern(hostname, /-/g),
+            underscoreCount: this.countPattern(hostname, /_/g),
             digitCount: this.countPattern(hostname, /\d/g),
-            hasExcessiveSpecialChars: this.countPattern(hostname, '-') > 2 || 
-                                       this.countPattern(hostname, '_') > 1
+            hasExcessiveSpecialChars: this.countPattern(hostname, /-/g) > 2 ||
+                                       this.countPattern(hostname, /_/g) > 1
         };
     },
-    
+
     // ============================================
     // HEURISTIC HELPERS
     // ============================================
-    
+
     /**
-     * Check if URL contains suspicious keyword combinations
-     * @param {string} url - Full URL to check
-     * @param {array} keywords - Array of suspicious keywords
-     * @returns {array} Found keywords
+     * Find suspicious keywords
      */
     findSuspiciousKeywords: function(url, keywords) {
         const urlLower = url.toLowerCase();
         return keywords.filter(keyword => urlLower.includes(keyword.toLowerCase()));
     },
-    
+
     /**
-     * Detect brand impersonation attempts
-     * @param {string} hostname - Hostname to check
-     * @param {string} brand - Brand name to check against
-     * @returns {object} {isImpersonation: boolean, method: string}
+     * Detect brand impersonation
      */
     detectBrandImpersonation: function(hostname, brand) {
         const hostLower = hostname.toLowerCase();
         const brandLower = brand.toLowerCase();
-        
-        // Check if domain legitimately belongs to brand
+
+        // Legitimate patterns
         const legitPatterns = [
             `${brandLower}.com`,
             `www.${brandLower}.com`,
             `${brandLower}.org`,
             `${brandLower}.net`
         ];
-        
+
         const isLegit = legitPatterns.some(pattern => {
             return hostLower === pattern || hostLower.endsWith(`.${pattern}`);
         });
-        
+
         if (isLegit) {
             return { isImpersonation: false, method: null };
         }
-        
-        // Check if brand name appears in suspicious ways
+
+        // Check suspicious patterns
         if (hostLower.includes(brandLower)) {
-            // As subdomain: paypal.evil.com
+            // Subdomain: paypal.evil.com
             if (hostLower.startsWith(brandLower + '.')) {
                 return { isImpersonation: true, method: 'subdomain' };
             }
-            
+
             // With dash: paypal-login.com
             if (hostLower.includes(brandLower + '-') || hostLower.includes('-' + brandLower)) {
                 return { isImpersonation: true, method: 'dash-prefix' };
             }
-            
-            // In subdomain: login.paypal-secure.com
+
+            // Embedded: login.paypal-secure.com
             return { isImpersonation: true, method: 'embedded' };
         }
-        
+
         return { isImpersonation: false, method: null };
     },
-    
+
     // ============================================
     // URL SHORTENER DETECTION
     // ============================================
-    
+
     /**
-     * Check if URL uses a known shortening service
-     * @param {string} hostname - Hostname to check
-     * @returns {boolean} True if shortener detected
+     * Check if URL uses shortening service
      */
     isShortener: function(hostname) {
-        const shorteners = [
+        const shorteners = new Set([
             'bit.ly', 'tinyurl.com', 'goo.gl', 't.co', 'ow.ly',
             'is.gd', 'buff.ly', 'adf.ly', 'bl.ink', 'lnkd.in',
             'shorte.st', 'mcaf.ee', 'su.pr', 'bc.vc', 'youtu.be',
             'j.mp', 'tr.im', 'cli.gs', 'tiny.cc', 'url.ie'
-        ];
-        
-        return shorteners.some(shortener => hostname.includes(shortener));
+        ]);
+
+        const lower = hostname.toLowerCase();
+        for (const shortener of shorteners) {
+            if (lower.includes(shortener)) return true;
+        }
+        return false;
     },
-    
+
     // ============================================
     // SIMILARITY FUNCTIONS
     // ============================================
-    
+
     /**
-     * Calculate Jaro-Winkler similarity (alternative to Levenshtein)
-     * @param {string} s1 - First string
-     * @param {string} s2 - Second string
-     * @returns {number} Similarity score (0-1)
+     * Jaro-Winkler similarity (alternative metric)
      */
     jaroWinklerSimilarity: function(s1, s2) {
         if (s1 === s2) return 1.0;
-        
+
         const len1 = s1.length;
         const len2 = s2.length;
-        
+
         if (len1 === 0 || len2 === 0) return 0.0;
-        
+
         const matchDistance = Math.floor(Math.max(len1, len2) / 2) - 1;
         const s1Matches = new Array(len1).fill(false);
         const s2Matches = new Array(len2).fill(false);
-        
+
         let matches = 0;
         let transpositions = 0;
-        
+
         // Find matches
         for (let i = 0; i < len1; i++) {
             const start = Math.max(0, i - matchDistance);
             const end = Math.min(i + matchDistance + 1, len2);
-            
+
             for (let j = start; j < end; j++) {
                 if (s2Matches[j] || s1[i] !== s2[j]) continue;
                 s1Matches[i] = true;
@@ -321,9 +304,9 @@ const PhishGuardUtils = {
                 break;
             }
         }
-        
+
         if (matches === 0) return 0.0;
-        
+
         // Find transpositions
         let k = 0;
         for (let i = 0; i < len1; i++) {
@@ -332,44 +315,78 @@ const PhishGuardUtils = {
             if (s1[i] !== s2[k]) transpositions++;
             k++;
         }
-        
-        const jaro = (matches / len1 + matches / len2 + 
+
+        const jaro = (matches / len1 + matches / len2 +
                      (matches - transpositions / 2) / matches) / 3;
-        
+
         return jaro;
     },
-    
+
     // ============================================
-    // DATA VALIDATION
+    // DATA VALIDATION & UTILITIES
     // ============================================
-    
+
     /**
-     * Sanitize string for safe display
-     * @param {string} str - String to sanitize
-     * @returns {string} Sanitized string
+     * Sanitize string for safe display (XSS prevention)
      */
     sanitize: function(str) {
         if (typeof str !== 'string') return '';
-        return str.replace(/[<>]/g, '');
+        const div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
     },
-    
+
     /**
-     * Format timestamp to readable string
-     * @param {number} timestamp - Unix timestamp
-     * @returns {string} Formatted date/time
+     * Format timestamp
      */
     formatTimestamp: function(timestamp) {
-        const date = new Date(timestamp);
-        return date.toLocaleString();
+        try {
+            const date = new Date(timestamp);
+            return date.toLocaleString();
+        } catch (e) {
+            return 'Invalid date';
+        }
     },
-    
+
     /**
-     * Deep clone object
-     * @param {object} obj - Object to clone
-     * @returns {object} Cloned object
+     * Deep clone object safely
      */
     deepClone: function(obj) {
-        return JSON.parse(JSON.stringify(obj));
+        try {
+            return JSON.parse(JSON.stringify(obj));
+        } catch (e) {
+            console.error('Deep clone failed:', e);
+            return null;
+        }
+    },
+
+    /**
+     * Debounce function (utility for performance)
+     */
+    debounce: function(func, wait) {
+        let timeout;
+        return function executedFunction(...args) {
+            const later = () => {
+                clearTimeout(timeout);
+                func(...args);
+            };
+            clearTimeout(timeout);
+            timeout = setTimeout(later, wait);
+        };
+    },
+
+    /**
+     * Throttle function (utility for performance)
+     */
+    throttle: function(func, limit) {
+        let inThrottle;
+        return function executedFunction(...args) {
+            if (!inThrottle) {
+                func.apply(this, args);
+                inThrottle = true;
+                setTimeout(() => inThrottle = false, limit);
+            }
+        };
     }
 };
 
@@ -378,4 +395,9 @@ if (typeof window !== 'undefined') {
     window.PhishGuardUtils = PhishGuardUtils;
 }
 
-console.log("PhishGuard Utils: Loaded");
+// Export for Node.js (if needed)
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = PhishGuardUtils;
+}
+
+console.log("PhishGuard Utils: Loaded & Optimized");

@@ -1,47 +1,56 @@
 {
-  "manifest_version": 3,
-  "name": "PhishGuard - Advanced Phishing Detection",
-  "version": "6.1.0",
-  "description": "Real-time phishing detection with heuristic analysis and threat intelligence APIs",
+  "manifest_version": 2,
+  "name": "PhishGuard DeepSea",
+  "version": "2.1.0",
+  "description": "Advanced phishing protection with deep sea sonar technology - Firefox optimized",
+
   "permissions": [
-    "activeTab",
-    "scripting",
-    "storage",
     "tabs",
-    "alarms",
-    "webRequest"
-  ],
-  "host_permissions": [
+    "storage",
+    "webNavigation",
     "<all_urls>"
   ],
-  "action": {
-    "default_popup": "popup.html",
-    "default_icon": {
-      "16": "icons/icon128.png",
-      "48": "icons/icon128.png",
-      "128": "icons/icon128.png"
-    }
-  },
+
   "background": {
     "scripts": ["background.js"],
-    "type": "module"
+    "persistent": false
   },
+
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
       "js": ["utils.js", "content.js"],
-      "run_at": "document_idle"
+      "run_at": "document_end",
+      "all_frames": false
     }
   ],
-  "web_accessible_resources": [
-    {
-      "resources": ["rules.json"],
-      "matches": ["<all_urls>"]
+
+  "browser_action": {
+    "default_popup": "popup.html",
+    "default_title": "PhishGuard Protection",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
     }
-  ],
+  },
+
   "icons": {
-    "16": "icons/icon128.png",
-    "48": "icons/icon128.png",
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
     "128": "icons/icon128.png"
+  },
+
+  "web_accessible_resources": [
+    "warning.html"
+  ],
+
+  "content_security_policy": "script-src 'self'; object-src 'self'",
+
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "phishguard@deepsea.com",
+      "strict_min_version": "91.0"
+    }
   }
 }

@@ -1,25 +1,20 @@
-// content.js - Universal Phishing Detection Engine
-// Works on ALL websites - scans for threats regardless of domain
-
+// content.js - FIXED VERSION - Secure & Optimized
 (function() {
     'use strict';
-    
-    // Prevent double injection
+
     if (window.phishGuardRunning) {
         console.log("PhishGuard: Already running");
         return;
     }
-    
+
     window.phishGuardRunning = true;
     console.log("PhishGuard: Starting universal scan engine...");
-    
-    // Browser API compatibility
-    const browserAPI = (typeof browser !== 'undefined') ? browser : chrome;
-    
-    // Check if utils loaded
+
+    const browserAPI = browser;
+
+    // Verify utils loaded
     if (typeof PhishGuardUtils === 'undefined') {
-        console.error("PhishGuard: Utils not loaded! Extension may not work properly.");
-        // Define minimal utils inline as fallback
+        console.error("PhishGuard: Utils not loaded!");
         window.PhishGuardUtils = {
             calculateEntropy: function(str) {
                 if (!str) return 0;
@@ -27,13 +22,18 @@
                 for (let char of str) freq[char] = (freq[char] || 0) + 1;
                 return Object.values(freq).reduce((sum, f) => {
                     const p = f / str.length;
-                    return sum - p * Math.log2(p);
+                    return sum - (p > 0 ? p * Math.log2(p) : 0);
                 }, 0);
             },
             levenshteinDistance: function(a, b) {
+                if (a === b) return 0;
+                if (a.length === 0) return b.length;
+                if (b.length === 0) return a.length;
+                
                 const matrix = Array(b.length + 1).fill(null).map(() => Array(a.length + 1).fill(0));
                 for (let i = 0; i <= a.length; i++) matrix[0][i] = i;
                 for (let j = 0; j <= b.length; j++) matrix[j][0] = j;
+                
                 for (let j = 1; j <= b.length; j++) {
                     for (let i = 1; i <= a.length; i++) {
                         const cost = a[i - 1] === b[j - 1] ? 0 : 1;
@@ -48,11 +48,11 @@
             },
             isIPAddress: function(host) {
                 const ipv4 = /^(\d{1,3}\.){3}\d{1,3}$/;
-                const ipv6 = /^([0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}$/;
                 if (ipv4.test(host)) {
                     const parts = host.split('.').map(Number);
                     return { isIP: parts.every(n => n >= 0 && n <= 255), type: 'ipv4' };
                 }
+                const ipv6 = /^([0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}$/;
                 if (ipv6.test(host)) return { isIP: true, type: 'ipv6' };
                 return { isIP: false, type: null };
             },
@@ -69,37 +69,77 @@
             }
         };
     }
-    
+
     // ============================================
-    // CONFIGURATION - Universal Detection Rules
+    // CONFIGURATION
     // ============================================
-    
+
     const CONFIG = {
+        // API KEYS - Store in browser.storage for security
+        PHISHTANK_API_KEY: null,
+        GOOGLE_SAFE_BROWSING_KEY: null,
+
+        // Legitimate domains (for quick exit)
+        LEGITIMATE_DOMAINS: [
+            'google.com', 'youtube.com', 'gmail.com', 'microsoft.com', 'office.com',
+            'apple.com', 'icloud.com', 'amazon.com', 'facebook.com', 'meta.com',
+            'instagram.com', 'twitter.com', 'x.com', 'linkedin.com', 'reddit.com',
+            'github.com', 'gitlab.com', 'stackoverflow.com', 'netflix.com', 'spotify.com',
+            'paypal.com', 'stripe.com', 'ebay.com', 'walmart.com', 'target.com'
+        ],
+
         SUSPICIOUS_TLDS: [
             'tk', 'ml', 'ga', 'cf', 'gq', 'xyz', 'top', 'work', 'click',
             'link', 'racing', 'loan', 'download', 'stream', 'party', 'review'
         ],
-        
-        // These are used ONLY to detect FAKE sites impersonating them
-        // Example: "paypa1.com" would be flagged, but "paypal.com" is fine
-        TRUSTED_BRANDS: [
+
+        BRAND_NAMES: [
             'google', 'paypal', 'apple', 'microsoft', 'facebook', 'amazon',
-            'netflix', 'instagram', 'twitter', 'linkedin', 'github', 'gitlab'
+            'netflix', 'instagram', 'twitter', 'linkedin', 'github'
         ],
-        
+
         SUSPICIOUS_KEYWORDS: [
             'verify', 'account', 'secure', 'update', 'confirm', 'login',
             'banking', 'suspended', 'locked', 'urgent', 'expire'
         ]
     };
-    
+
+    // ============================================
+    // LEGITIMATE DOMAIN CHECK (Fixed)
+    // ============================================
+
+    function isLegitimateWebsite(hostname) {
+        const domain = hostname.toLowerCase();
+
+        // Direct match
+        if (CONFIG.LEGITIMATE_DOMAINS.includes(domain)) return true;
+
+        // Check without www
+        if (domain.startsWith('www.')) {
+            const withoutWww = domain.substring(4);
+            if (CONFIG.LEGITIMATE_DOMAINS.includes(withoutWww)) return true;
+        }
+
+        // Check if subdomain of legitimate
+        for (const legitDomain of CONFIG.LEGITIMATE_DOMAINS) {
+            if (domain.endsWith('.' + legitDomain)) return true;
+        }
+
+        return false;
+    }
+
+    function extractBaseDomain(hostname) {
+        const parts = hostname.split('.');
+        return parts.length >= 2 ? parts.slice(-2).join('.') : hostname;
+    }
+
     // ============================================
     // HTTP WARNING BANNER
     // ============================================
-    
+
     function showHTTPWarning() {
         if (document.getElementById('phishguard-banner')) return;
-        
+
         const banner = document.createElement('div');
         banner.id = 'phishguard-banner';
         banner.innerHTML = `
@@ -110,7 +150,6 @@
                 font-family: system-ui, sans-serif; font-size: 14px;
                 font-weight: 600; z-index: 2147483647;
                 box-shadow: 0 2px 10px rgba(0,0,0,0.3);
-                animation: slideDown 0.3s ease-out;
             ">
                 ⚠️ WARNING: This site uses insecure HTTP. Your data may be visible to others.
                 <button onclick="this.parentElement.parentElement.remove()" style="
@@ -119,25 +158,19 @@
                     cursor: pointer; margin-left: 15px; font-weight: 600;
                 ">Dismiss</button>
             </div>
-            <style>
-                @keyframes slideDown {
-                    from { transform: translateY(-100%); opacity: 0; }
-                    to { transform: translateY(0); opacity: 1; }
-                }
-            </style>
         `;
         document.body.appendChild(banner);
-        
+
         setTimeout(() => {
             if (banner.parentElement) banner.remove();
         }, 10000);
     }
-    
+
     function showCriticalAlert() {
         const hasPassword = document.querySelector('input[type="password"]');
         if (!hasPassword) return;
         if (document.getElementById('phishguard-critical')) return;
-        
+
         const alert = document.createElement('div');
         alert.id = 'phishguard-critical';
         alert.innerHTML = `
@@ -169,24 +202,146 @@
         `;
         document.body.appendChild(alert);
     }
-    
+
     // ============================================
-    // MAIN SCAN ENGINE - Works on ANY website
+    // API INTEGRATION (Fixed with parallel calls)
     // ============================================
-    
+
+    async function checkPhishTank(url) {
+        if (!CONFIG.PHISHTANK_API_KEY) return { isListed: false };
+
+        try {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 5000);
+
+            const response = await fetch('https://checkurl.phishtank.com/checkurl/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: `url=${encodeURIComponent(url)}&format=json&app_key=${CONFIG.PHISHTANK_API_KEY}`,
+                signal: controller.signal
+            });
+
+            clearTimeout(timeout);
+
+            if (response.ok) {
+                const data = await response.json();
+                return {
+                    isListed: data.results?.in_database === true,
+                    verified: data.results?.verified === true
+                };
+            }
+        } catch (error) {
+            console.warn("PhishGuard: PhishTank check failed:", error.message);
+        }
+
+        return { isListed: false };
+    }
+
+    async function checkGoogleSafeBrowsing(url) {
+        if (!CONFIG.GOOGLE_SAFE_BROWSING_KEY) return { isThreat: false };
+
+        try {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 5000);
+
+            const apiUrl = `https://safebrowsing.googleapis.com/v4/threatMatches:find?key=${CONFIG.GOOGLE_SAFE_BROWSING_KEY}`;
+
+            const response = await fetch(apiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    client: {
+                        clientId: "phishguard",
+                        clientVersion: "2.1.0"
+                    },
+                    threatInfo: {
+                        threatTypes: ["MALWARE", "SOCIAL_ENGINEERING", "UNWANTED_SOFTWARE"],
+                        platformTypes: ["ANY_PLATFORM"],
+                        threatEntryTypes: ["URL"],
+                        threatEntries: [{ url: url }]
+                    }
+                }),
+                signal: controller.signal
+            });
+
+            clearTimeout(timeout);
+
+            if (response.ok) {
+                const data = await response.json();
+                return {
+                    isThreat: data.matches && data.matches.length > 0,
+                    threats: data.matches || []
+                };
+            }
+        } catch (error) {
+            console.warn("PhishGuard: Google Safe Browsing check failed:", error.message);
+        }
+
+        return { isThreat: false };
+    }
+
+    // ============================================
+    // MAIN SCAN ENGINE (Fixed with proper logic)
+    // ============================================
+
     async function scanWebsite() {
         console.log("PhishGuard: Scanning", window.location.href);
-        
+
         let score = 0;
         const reasons = [];
-        
+
         const url = window.location.href;
         const hostname = window.location.hostname;
         const protocol = window.location.protocol;
         const parts = hostname.split('.');
         const tld = parts[parts.length - 1].toLowerCase();
+
+        // ===== LEGITIMATE CHECK - But don't skip all checks =====
+        const isLegit = isLegitimateWebsite(hostname);
         
-        // ===== 1. HTTP CHECK =====
+        if (isLegit) {
+            console.log("PhishGuard: Recognized legitimate site");
+            
+            // Still warn about HTTP on legitimate sites
+            if (protocol === 'http:') {
+                showHTTPWarning();
+                score = 15;
+                reasons.push({
+                    reason: "Legitimate site using insecure HTTP",
+                    weight: 15,
+                    detail: "This is a real site but not using HTTPS encryption"
+                });
+
+                // Check for password fields
+                if (document.querySelector('input[type="password"]')) {
+                    showCriticalAlert();
+                    score += 50;
+                    reasons.push({
+                        reason: "🚨 CRITICAL: Login Form on HTTP",
+                        weight: 50,
+                        detail: "Password fields on unencrypted connection"
+                    });
+                }
+            }
+
+            // Send report and return
+            const report = {
+                score: score,
+                reasons: reasons,
+                url: url,
+                hostname: hostname,
+                protocol: protocol,
+                legitimate: true,
+                timestamp: Date.now()
+            };
+
+            sendReport(report);
+            return report;
+        }
+
+        // ===== FULL SCAN FOR NON-LEGITIMATE SITES =====
+
+        // HTTP check
         if (protocol === 'http:') {
             showHTTPWarning();
             score += 15;
@@ -195,7 +350,7 @@
                 weight: 15,
                 detail: "Site doesn't use HTTPS encryption"
             });
-            
+
             if (document.querySelector('input[type="password"]')) {
                 showCriticalAlert();
                 score += 50;
@@ -206,19 +361,19 @@
                 });
             }
         }
-        
-        // ===== 2. IP ADDRESS =====
+
+        // IP Address
         const ipCheck = PhishGuardUtils.isIPAddress(hostname);
         if (ipCheck.isIP) {
             score += 40;
             reasons.push({
                 reason: "Direct IP Address Access",
                 weight: 40,
-                detail: `Using IP (${hostname}) instead of domain name`
+                detail: `Using ${ipCheck.type.toUpperCase()} address instead of domain name`
             });
         }
-        
-        // ===== 3. SUSPICIOUS TLD =====
+
+        // Suspicious TLD
         if (CONFIG.SUSPICIOUS_TLDS.includes(tld)) {
             score += 20;
             reasons.push({
@@ -227,8 +382,8 @@
                 detail: `.${tld} domains are often used in phishing`
             });
         }
-        
-        // ===== 4. DOMAIN ENTROPY (Randomness) =====
+
+        // Domain Entropy
         const entropy = PhishGuardUtils.calculateEntropy(hostname);
         if (entropy > 4.5) {
             score += 25;
@@ -238,8 +393,8 @@
                 detail: `Domain appears randomly generated (entropy: ${entropy.toFixed(2)})`
             });
         }
-        
-        // ===== 5. TOO MANY SUBDOMAINS =====
+
+        // Too Many Subdomains
         if (parts.length > 4) {
             score += 15;
             reasons.push({
@@ -248,38 +403,35 @@
                 detail: `${parts.length} subdomain levels detected`
             });
         }
-        
-        // ===== 6. TYPOSQUATTING (Fake brands) =====
-        // This checks if site LOOKS LIKE a trusted brand but isn't
-        const typos = PhishGuardUtils.checkTyposquatting(hostname, CONFIG.TRUSTED_BRANDS);
+
+        // Typosquatting
+        const baseDomain = extractBaseDomain(hostname);
+        const typos = PhishGuardUtils.checkTyposquatting(baseDomain, CONFIG.BRAND_NAMES);
         if (typos.length > 0) {
             const match = typos[0];
-            score += 45;
+            score += 50;
             reasons.push({
                 reason: "⚠️ Possible Brand Impersonation",
-                weight: 45,
-                detail: `Domain resembles "${match.target}" (likely fake)`
+                weight: 50,
+                detail: `Domain resembles "${match.target}" (${match.distance} character difference)`
             });
         }
-        
-        // ===== 7. BRAND NAME MISUSE =====
-        for (const brand of CONFIG.TRUSTED_BRANDS) {
+
+        // Brand Name Misuse
+        for (const brand of CONFIG.BRAND_NAMES) {
             const lower = hostname.toLowerCase();
-            const hasBrand = lower.includes(brand);
-            const isReal = lower === `${brand}.com` || lower === `www.${brand}.com` || lower.endsWith(`.${brand}.com`);
-            
-            if (hasBrand && !isReal) {
+            if (lower.includes(brand) && !lower.endsWith(`${brand}.com`)) {
                 score += 35;
                 reasons.push({
                     reason: "Brand Name Misuse",
                     weight: 35,
-                    detail: `Contains "${brand}" but not official domain`
+                    detail: `Contains "${brand}" but not the official domain`
                 });
                 break;
             }
         }
-        
-        // ===== 8. SUSPICIOUS KEYWORDS =====
+
+        // Suspicious Keywords
         const urlLower = url.toLowerCase();
         const found = CONFIG.SUSPICIOUS_KEYWORDS.filter(kw => urlLower.includes(kw));
         if (found.length >= 2) {
@@ -290,8 +442,8 @@
                 detail: `Found: ${found.join(', ')}`
             });
         }
-        
-        // ===== 9. LONG DOMAIN =====
+
+        // Long Domain
         if (hostname.length > 40) {
             score += 15;
             reasons.push({
@@ -300,8 +452,8 @@
                 detail: `${hostname.length} characters`
             });
         }
-        
-        // ===== 10. EXCESSIVE DASHES =====
+
+        // Excessive Dashes
         const dashes = (hostname.match(/-/g) || []).length;
         if (dashes > 2) {
             score += 10;
@@ -311,20 +463,20 @@
                 detail: `${dashes} dashes detected`
             });
         }
-        
-        // ===== 11. EXTERNAL FORMS =====
+
+        // External Forms
         const forms = document.querySelectorAll('form[action]');
         let externalForms = 0;
         forms.forEach(form => {
-            const action = form.getAttribute('action');
-            if (action && action.startsWith('http')) {
-                try {
+            try {
+                const action = form.getAttribute('action');
+                if (action && action.startsWith('http')) {
                     const actionHost = new URL(action).hostname;
                     if (actionHost !== hostname) externalForms++;
-                } catch (e) {}
-            }
+                }
+            } catch (e) {}
         });
-        
+
         if (externalForms > 0) {
             score += 30;
             reasons.push({
@@ -333,11 +485,41 @@
                 detail: `${externalForms} forms send data elsewhere`
             });
         }
-        
-        // Cap score at 100
+
+        // API Checks (Parallel for speed)
+        try {
+            console.log("PhishGuard: Checking threat databases...");
+
+            const [phishTankResult, googleResult] = await Promise.all([
+                checkPhishTank(url),
+                checkGoogleSafeBrowsing(url)
+            ]);
+
+            if (phishTankResult.isListed) {
+                score += 80;
+                reasons.push({
+                    reason: "🚨 CONFIRMED: Listed in PhishTank Database",
+                    weight: 80,
+                    detail: `This URL is confirmed as phishing${phishTankResult.verified ? ' (verified)' : ''}`
+                });
+            }
+
+            if (googleResult.isThreat) {
+                score += 80;
+                const threatTypes = googleResult.threats.map(t => t.threatType).join(', ');
+                reasons.push({
+                    reason: "🚨 CONFIRMED: Flagged by Google Safe Browsing",
+                    weight: 80,
+                    detail: `Threat types: ${threatTypes}`
+                });
+            }
+        } catch (error) {
+            console.warn("PhishGuard: API checks failed:", error);
+        }
+
+        // Cap score
         score = Math.min(score, 100);
-        
-        // Create report
+
         const report = {
             score: score,
             reasons: reasons,
@@ -346,38 +528,41 @@
             protocol: protocol,
             timestamp: Date.now()
         };
-        
-        console.log("PhishGuard: Scan complete -", score, "points");
-        
-        // Send to background
+
+        console.log("PhishGuard: Scan complete - Score:", score);
+        sendReport(report);
+        return report;
+    }
+
+    // ============================================
+    // REPORT SENDING
+    // ============================================
+
+    function sendReport(report) {
         try {
             browserAPI.runtime.sendMessage({
                 action: "reportRisk",
                 data: report
-            }, () => {
-                if (browserAPI.runtime.lastError) {
-                    console.warn("PhishGuard: Could not send report");
-                }
+            }).catch(error => {
+                console.warn("PhishGuard: Could not send report:", error);
             });
         } catch (e) {
             console.error("PhishGuard: Error sending report:", e);
         }
-        
-        return report;
     }
-    
+
     // ============================================
     // MESSAGE LISTENER
     // ============================================
-    
+
     browserAPI.runtime.onMessage.addListener((request, sender, sendResponse) => {
         console.log("PhishGuard: Message received:", request.action);
-        
+
         if (request.action === "ping") {
             sendResponse({ status: "alive" });
-            return true;
+            return false;
         }
-        
+
         if (request.action === "manualScan") {
             scanWebsite().then(report => {
                 sendResponse({ status: "complete", report: report });
@@ -386,23 +571,25 @@
             });
             return true;
         }
+
+        return false;
     });
-    
+
     // ============================================
     // AUTO-SCAN ON PAGE LOAD
     // ============================================
-    
+
     function init() {
         console.log("PhishGuard: Initializing scan...");
         setTimeout(scanWebsite, 1000);
     }
-    
+
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', init);
     } else {
         init();
     }
-    
+
     console.log("PhishGuard: Ready for universal scanning");
-    
+
 })();

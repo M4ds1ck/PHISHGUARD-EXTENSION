@@ -1,437 +1,569 @@
-// popup.js - Enhanced Popup Logic
-console.log("PhishGuard Popup: Initializing...");
+// popup.js - FIXED - Shows real analysis even on bypassed sites
+console.log("Popup initializing...");
 
-// DOM Elements
-const radarContainer = document.getElementById('radarContainer');
-const scoreEl = document.getElementById('score');
-const statusEl = document.getElementById('status');
-const urlDisplay = document.getElementById('currentUrl');
-const logList = document.getElementById('logList');
-const rescanBtn = document.getElementById('rescanBtn');
-const whitelistBtn = document.getElementById('whitelistBtn');
-const blacklistBtn = document.getElementById('blacklistBtn');
-const statScanned = document.getElementById('statScanned');
-const statBlocked = document.getElementById('statBlocked');
+const browserAPI = browser;
+console.log("Browser: Firefox");
 
-// Canvas Animation
-const canvas = document.getElementById('radar');
-const ctx = canvas.getContext('2d');
-let ringColor = '#00f3ff';
-let angle = 0;
 let currentTab = null;
-let currentHostname = null;
-
-// Set canvas size
-function resizeCanvas() {
-    const rect = radarContainer.getBoundingClientRect();
-    canvas.width = rect.width;
-    canvas.height = rect.height;
-}
-resizeCanvas();
-
-// Radar animation
-function animateRadar() {
-    const width = canvas.width;
-    const height = canvas.height;
-    const centerX = width / 2;
-    const centerY = height / 2;
-
-    ctx.clearRect(0, 0, width, height);
-
-    // Draw concentric circles
-    ctx.strokeStyle = ringColor;
-    ctx.lineWidth = 1.5;
-    ctx.globalAlpha = 0.3;
-
-    for (let i = 1; i <= 3; i++) {
-        ctx.beginPath();
-        ctx.arc(centerX, centerY, 40 * i, 0, Math.PI * 2);
-        ctx.stroke();
-    }
-
-    // Draw scanning line
-    ctx.save();
-    ctx.translate(centerX, centerY);
-    ctx.rotate(angle);
-    ctx.globalAlpha = 0.8;
-    ctx.lineWidth = 3;
-    ctx.strokeStyle = ringColor;
-    ctx.shadowBlur = 15;
-    ctx.shadowColor = ringColor;
-
-    ctx.beginPath();
-    ctx.moveTo(0, 0);
-    ctx.lineTo(0, -100);
-    ctx.stroke();
-
-    ctx.restore();
-
-    angle += 0.05;
-    requestAnimationFrame(animateRadar);
-}
-animateRadar();
-
-// ============================================
-// UI STATE MANAGEMENT
-// ============================================
-
-function setUIState(state) {
-    // Remove all state classes
-    radarContainer.classList.remove('state-safe', 'state-warning', 'state-danger');
-    
-    // Add appropriate state class
-    radarContainer.classList.add(`state-${state}`);
-    
-    // Update ring color
-    if (state === 'safe') {
-        ringColor = '#00ff9d';
-    } else if (state === 'warning') {
-        ringColor = '#fcee0a';
-    } else if (state === 'danger') {
-        ringColor = '#ff003c';
-    } else {
-        ringColor = '#00f3ff';
-    }
-}
-
-function showLoading() {
-    logList.innerHTML = `
-        <div class="loading">
-            <div class="spinner"></div>
-            <div>Analyzing security threats...</div>
-        </div>
-    `;
-    scoreEl.textContent = '...';
-    statusEl.textContent = 'SCANNING';
-    setUIState('neutral');
-}
-
-function showError(message) {
-    logList.innerHTML = `
-        <div class="empty-state">
-            <div class="empty-icon">⚠️</div>
-            <div class="empty-text">${message}</div>
-        </div>
-    `;
-    scoreEl.textContent = '--';
-    statusEl.textContent = 'ERROR';
-    setUIState('neutral');
-}
-
-function showSystemPage() {
-    logList.innerHTML = `
-        <div class="empty-state">
-            <div class="empty-icon">🔒</div>
-            <div class="empty-text">
-                PhishGuard is inactive on browser system pages.<br>
-                Navigate to a website to enable protection.
-            </div>
-        </div>
-    `;
-    scoreEl.textContent = '--';
-    statusEl.textContent = 'SYSTEM PAGE';
-    urlDisplay.textContent = 'Browser Internal Page';
-    setUIState('neutral');
-    
-    // Disable action buttons
-    rescanBtn.disabled = true;
-    whitelistBtn.disabled = true;
-    blacklistBtn.disabled = true;
-}
-
-// ============================================
-// DATA RENDERING
-// ============================================
-
-function renderReport(data) {
-    console.log("Rendering report:", data);
-    
-    // Update score
-    scoreEl.textContent = data.score + '%';
-    
-    // Update URL
-    if (data.url) {
-        try {
-            const url = new URL(data.url);
-            currentHostname = url.hostname;
-            urlDisplay.textContent = url.hostname + url.pathname;
-        } catch (e) {
-            urlDisplay.textContent = data.url;
-        }
-    }
-    
-    // Update status and color
-    if (data.score >= 75) {
-        statusEl.textContent = 'CRITICAL THREAT';
-        setUIState('danger');
-    } else if (data.score >= 50) {
-        statusEl.textContent = 'THREAT DETECTED';
-        setUIState('danger');
-    } else if (data.score >= 25) {
-        statusEl.textContent = 'SUSPICIOUS';
-        setUIState('warning');
-    } else if (data.score > 0) {
-        statusEl.textContent = 'LOW RISK';
-        setUIState('warning');
-    } else {
-        statusEl.textContent = 'SECURE';
-        setUIState('safe');
-    }
-    
-    // Render detection reasons
-    logList.innerHTML = '';
-    
-    if (!data.reasons || data.reasons.length === 0) {
-        logList.innerHTML = `
-            <div class="empty-state">
-                <div class="empty-icon">✓</div>
-                <div class="empty-text">
-                    No security threats detected.<br>
-                    This site appears to be safe.
-                </div>
-            </div>
-        `;
-        return;
-    }
-    
-    // Sort reasons by weight (highest first)
-    const sortedReasons = [...data.reasons].sort((a, b) => {
-        const weightA = a.weight || 0;
-        const weightB = b.weight || 0;
-        return weightB - weightA;
-    });
-    
-    sortedReasons.forEach(item => {
-        const weight = item.weight || 0;
-        const logItem = document.createElement('div');
-        logItem.className = 'log-item';
-        
-        // Set border color based on severity
-        if (weight >= 50) {
-            logItem.style.borderLeftColor = '#ff003c';
-        } else if (weight >= 25) {
-            logItem.style.borderLeftColor = '#ffb300';
-        } else if (weight >= 10) {
-            logItem.style.borderLeftColor = '#fcee0a';
-        } else {
-            logItem.style.borderLeftColor = '#4caf50';
-        }
-        
-        // Build log item HTML
-        let html = `
-            <div class="log-title">
-                <span>${item.reason}</span>
-                <span class="log-weight">+${weight} pts</span>
-            </div>
-        `;
-        
-        if (item.detail) {
-            html += `<div class="log-detail">${item.detail}</div>`;
-        }
-        
-        logItem.innerHTML = html;
-        logList.appendChild(logItem);
-    });
-}
-
-// ============================================
-// STATISTICS UPDATE
-// ============================================
-
-async function updateStats() {
-    try {
-        chrome.runtime.sendMessage({ action: "getStats" }, (stats) => {
-            if (stats) {
-                statScanned.textContent = stats.sitesScanned || 0;
-                statBlocked.textContent = stats.threatsBlocked || 0;
-            }
-        });
-    } catch (error) {
-        console.error("Error updating stats:", error);
-    }
-}
-
-// ============================================
-// SCAN LOGIC
-// ============================================
-
-async function performScan() {
-    if (!currentTab || !currentTab.id) {
-        showError("No active tab found");
-        return;
-    }
-    
-    showLoading();
-    
-    // First check cache
-    chrome.runtime.sendMessage(
-        { action: "getCachedRisk", tabId: currentTab.id },
-        (cached) => {
-            if (cached) {
-                console.log("Using cached data");
-                renderReport(cached);
-                return;
-            }
-            
-            // No cache, ping content script
-            chrome.tabs.sendMessage(
-                currentTab.id,
-                { action: "ping" },
-                (response) => {
-                    if (chrome.runtime.lastError) {
-                        console.warn("Content script not responding:", chrome.runtime.lastError);
-                        
-                        // Try to reload the tab
-                        showError("Connection lost. Click Rescan to retry.");
-                        setTimeout(() => {
-                            chrome.runtime.sendMessage(
-                                { action: "forceFixTab", tabId: currentTab.id }
-                            );
-                        }, 1000);
-                        return;
-                    }
-                    
-                    // Wait for the scan to complete and report back
-                    setTimeout(() => {
-                        chrome.runtime.sendMessage(
-                            { action: "getCachedRisk", tabId: currentTab.id },
-                            (data) => {
-                                if (data) {
-                                    renderReport(data);
-                                } else {
-                                    showError("No scan results available. Try rescanning.");
-                                }
-                            }
-                        );
-                    }, 500);
-                }
-            );
-        }
-    );
-    
-    // Update stats
-    updateStats();
-}
-
-// ============================================
-// ACTION HANDLERS
-// ============================================
-
-rescanBtn.addEventListener('click', async () => {
-    if (!currentTab || !currentTab.id) return;
-    
-    console.log("Manual rescan triggered");
-    
-    // Clear cache first
-    chrome.runtime.sendMessage(
-        { action: "clearCache", tabId: currentTab.id },
-        () => {
-            // Trigger new scan
-            chrome.tabs.sendMessage(
-                currentTab.id,
-                { action: "manualScan" },
-                () => {
-                    if (chrome.runtime.lastError) {
-                        showError("Cannot scan this page. Content script unavailable.");
-                        return;
-                    }
-                    
-                    // Wait and fetch results
-                    showLoading();
-                    setTimeout(() => performScan(), 500);
-                }
-            );
-        }
-    );
-});
-
-whitelistBtn.addEventListener('click', async () => {
-    if (!currentHostname || !currentTab) return;
-    
-    const confirmed = confirm(
-        `Add "${currentHostname}" to trusted domains?\n\n` +
-        `This domain will always be marked as safe.`
-    );
-    
-    if (confirmed) {
-        chrome.runtime.sendMessage(
-            {
-                action: "addToWhitelist",
-                domain: currentHostname,
-                tabId: currentTab.id
-            },
-            () => {
-                console.log(`Added ${currentHostname} to whitelist`);
-                // Rescan to update UI
-                setTimeout(() => performScan(), 200);
-            }
-        );
-    }
-});
-
-blacklistBtn.addEventListener('click', async () => {
-    if (!currentHostname || !currentTab) return;
-    
-    const confirmed = confirm(
-        `Block "${currentHostname}"?\n\n` +
-        `This domain will always be flagged as dangerous.`
-    );
-    
-    if (confirmed) {
-        chrome.runtime.sendMessage(
-            {
-                action: "addToBlacklist",
-                domain: currentHostname,
-                tabId: currentTab.id
-            },
-            () => {
-                console.log(`Added ${currentHostname} to blacklist`);
-                // Rescan to update UI
-                setTimeout(() => performScan(), 200);
-            }
-        );
-    }
-});
+let analysisComplete = false;
 
 // ============================================
 // INITIALIZATION
 // ============================================
 
-async function initialize() {
-    console.log("Initializing popup...");
-    
+document.addEventListener('DOMContentLoaded', async () => {
+    console.log("DOM loaded");
+
     try {
-        // Get current active tab
-        const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+        // Initialize radar first
+        const radar = new RadarScope('radar');
+        radar.start();
+        console.log("Radar started");
+
+        // Get current tab with timeout
+        const tabs = await Promise.race([
+            browserAPI.tabs.query({ active: true, currentWindow: true }),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Tab query timeout')), 3000))
+        ]);
+
+        if (!tabs || tabs.length === 0) {
+            console.error("No active tab found");
+            showError("No active tab");
+            return;
+        }
+
         currentTab = tabs[0];
-        
-        if (!currentTab || !currentTab.url) {
-            showError("Cannot access this page");
-            return;
-        }
-        
-        // Check if it's a system page
         const url = currentTab.url;
-        if (url.startsWith('chrome:') || 
-            url.startsWith('about:') || 
-            url.startsWith('moz-extension:') ||
-            url.startsWith('chrome-extension:') ||
-            url.startsWith('edge:') ||
-            url.startsWith('opera:')) {
-            showSystemPage();
+
+        console.log("Current tab:", { id: currentTab.id, url: url });
+
+        // Display URL
+        displayURL(url);
+
+        // Check if system page
+        if (!url || url.startsWith('about:') || url.startsWith('moz-extension:')) {
+            console.log("System page detected");
+            showSafe();
+            radar.setRiskLevel(0);
+            setupButtons();
             return;
         }
-        
-        // Perform scan
-        await performScan();
-        
+
+        // Load stats (non-blocking)
+        loadStats();
+
+        // Analyze URL with FORCE flag to ignore bypass
+        await analyzeURL(url, radar, true); // TRUE = force analysis even if bypassed
+
+        // Setup buttons
+        setupButtons();
+
+        console.log("Initialization complete");
+
     } catch (error) {
         console.error("Initialization error:", error);
         showError("Failed to initialize: " + error.message);
     }
+});
+
+// ============================================
+// URL DISPLAY
+// ============================================
+
+function displayURL(url) {
+    const urlEl = document.getElementById('currentUrl');
+    if (!urlEl) return;
+
+    try {
+        if (url.startsWith('about:') || url.startsWith('moz-extension:')) {
+            urlEl.textContent = "System Page";
+            return;
+        }
+
+        const urlObj = new URL(url);
+        urlEl.textContent = urlObj.hostname;
+        console.log("Displayed hostname:", urlObj.hostname);
+    } catch (e) {
+        console.error("URL parse error:", e);
+        urlEl.textContent = "Invalid URL";
+    }
 }
 
-// Start when DOM is ready
-document.addEventListener('DOMContentLoaded', initialize);
+// ============================================
+// STATS LOADING
+// ============================================
 
-console.log("PhishGuard Popup: Ready");
+async function loadStats() {
+    try {
+        const response = await Promise.race([
+            browserAPI.runtime.sendMessage({ action: "getStats" }),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Stats timeout')), 2000))
+        ]);
+
+        console.log("Stats received:", response);
+        if (response && !response.error) {
+            updateStats(response);
+        }
+    } catch (error) {
+        console.warn("Stats loading failed:", error);
+        updateStats({ sitesScanned: 0, threatsBlocked: 0 });
+    }
+}
+
+// ============================================
+// URL ANALYSIS (FIXED - Force real analysis)
+// ============================================
+
+async function analyzeURL(url, radar, forceAnalysis = false) {
+    console.log("Analyzing URL:", url, "| Force:", forceAnalysis);
+
+    try {
+        const response = await Promise.race([
+            browserAPI.runtime.sendMessage({
+                action: "analyzeUrl",
+                url: url,
+                forceAnalysis: forceAnalysis // NEW: Tell background to ignore bypass
+            }),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Analysis timeout')), 5000))
+        ]);
+
+        console.log("Analysis response:", response);
+
+        if (!response) {
+            throw new Error("No response from background script");
+        }
+
+        if (response.error) {
+            throw new Error(response.error);
+        }
+
+        // Show bypass indicator if site was bypassed
+        if (response.bypassed && !forceAnalysis) {
+            showBypassedWarning();
+        }
+
+        // Update UI with results
+        if (typeof response.score === 'number') {
+            showRisk(response);
+            radar.setRiskLevel(response.score);
+            analysisComplete = true;
+        } else {
+            showSafe();
+            radar.setRiskLevel(0);
+        }
+
+    } catch (error) {
+        console.error("Analysis failed:", error);
+        showError("Analysis failed: " + error.message);
+        radar.setRiskLevel(0);
+    }
+}
+
+// ============================================
+// BYPASSED WARNING BANNER
+// ============================================
+
+function showBypassedWarning() {
+    const banner = document.createElement('div');
+    banner.style.cssText = `
+        background: linear-gradient(135deg, #ffb300 0%, #ff6b00 100%);
+        color: white;
+        padding: 10px 20px;
+        text-align: center;
+        font-size: 11px;
+        font-weight: 600;
+        border-radius: 8px;
+        margin: 15px 20px;
+        box-shadow: 0 2px 10px rgba(255, 179, 0, 0.3);
+    `;
+    banner.innerHTML = `
+        ⚠️ You bypassed protection for this site
+    `;
+    
+    const urlDisplay = document.getElementById('urlDisplay');
+    if (urlDisplay && urlDisplay.parentElement) {
+        urlDisplay.parentElement.insertBefore(banner, urlDisplay.nextSibling);
+    }
+}
+
+// ============================================
+// UI UPDATES
+// ============================================
+
+function showRisk(data) {
+    console.log("Showing risk:", data);
+
+    const scoreEl = document.getElementById('score');
+    const statusEl = document.getElementById('status');
+    const logList = document.getElementById('logList');
+
+    if (!scoreEl || !statusEl || !logList) {
+        console.error("UI elements missing");
+        return;
+    }
+
+    const score = Math.round(data.score || 0);
+    
+    // Animate score
+    animateScore(score);
+
+    // Remove all state classes
+    document.body.classList.remove('state-safe', 'state-warning', 'state-danger');
+
+    // Set state based on thresholds
+    if (score >= 50) {
+        statusEl.textContent = "THREAT DETECTED";
+        document.body.classList.add('state-danger');
+    } else if (score >= 20) {
+        statusEl.textContent = "CAUTION";
+        document.body.classList.add('state-warning');
+    } else if (score > 0) {
+        statusEl.textContent = "LOW RISK";
+        document.body.classList.add('state-warning');
+    } else {
+        statusEl.textContent = "SECURE";
+        document.body.classList.add('state-safe');
+    }
+
+    // Display reasons
+    logList.innerHTML = '';
+
+    if (data.reasons && data.reasons.length > 0) {
+        console.log("Rendering", data.reasons.length, "reasons");
+        
+        // Sort by weight (highest first)
+        const sortedReasons = [...data.reasons].sort((a, b) => b.weight - a.weight);
+        
+        sortedReasons.forEach(r => {
+            const item = document.createElement('div');
+            item.className = 'log-item';
+            
+            // Sanitize reason text
+            const reasonText = escapeHtml(r.reason || 'Unknown threat');
+            const weightText = r.weight ? `+${r.weight}` : '';
+            
+            item.innerHTML = `
+                <div class="log-title">
+                    ${reasonText}
+                    ${weightText ? `<span class="log-weight">${weightText}</span>` : ''}
+                </div>
+            `;
+            logList.appendChild(item);
+        });
+    } else if (score === 0) {
+        showSafe();
+    } else {
+        logList.innerHTML = `
+            <div style="padding:10px; color:var(--neon-orange); font-size:12px;">
+                Suspicious activity detected
+            </div>
+        `;
+    }
+}
+
+function showSafe() {
+    console.log("Showing safe state");
+
+    document.getElementById('score').textContent = '0';
+    document.getElementById('status').textContent = 'SECURE';
+    
+    document.body.classList.remove('state-danger', 'state-warning');
+    document.body.classList.add('state-safe');
+
+    document.getElementById('logList').innerHTML = `
+        <div style="padding:10px; color:var(--neon-green); font-size:12px; display:flex; align-items:center; gap:8px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                <polyline points="22 4 12 14.01 9 11.01"/>
+            </svg>
+            No threats detected
+        </div>
+    `;
+}
+
+function showError(msg) {
+    console.error("Showing error:", msg);
+
+    document.getElementById('score').textContent = 'ERR';
+    document.getElementById('status').textContent = 'ERROR';
+    document.body.classList.add('state-warning');
+    
+    document.getElementById('logList').innerHTML = `
+        <div style="padding:10px; color:#ff6b6b; font-size:12px;">${escapeHtml(msg)}</div>
+    `;
+}
+
+function updateStats(stats) {
+    const scannedEl = document.getElementById('statScanned');
+    const blockedEl = document.getElementById('statBlocked');
+
+    if (scannedEl) scannedEl.textContent = stats.sitesScanned || 0;
+    if (blockedEl) blockedEl.textContent = stats.threatsBlocked || 0;
+}
+
+// ============================================
+// SCORE ANIMATION
+// ============================================
+
+function animateScore(target) {
+    const scoreEl = document.getElementById('score');
+    if (!scoreEl) return;
+
+    let current = 0;
+    const step = Math.ceil(target / 50);
+    const duration = 1000;
+    const interval = duration / (target / step);
+
+    const timer = setInterval(() => {
+        current += step;
+        if (current >= target) {
+            current = target;
+            clearInterval(timer);
+        }
+        scoreEl.textContent = current;
+    }, interval);
+}
+
+// ============================================
+// BUTTON HANDLERS
+// ============================================
+
+function setupButtons() {
+    console.log("Setting up buttons");
+
+    // Rescan button
+    const rescanBtn = document.getElementById('rescanBtn');
+    if (rescanBtn) {
+        rescanBtn.onclick = () => {
+            console.log("Rescan clicked");
+            window.location.reload();
+        };
+    }
+
+    // Whitelist button
+    const whitelistBtn = document.getElementById('whitelistBtn');
+    if (whitelistBtn) {
+        whitelistBtn.onclick = async () => {
+            console.log("Whitelist clicked");
+            
+            if (!currentTab || !currentTab.url) {
+                alert("No tab URL available");
+                return;
+            }
+
+            try {
+                const hostname = new URL(currentTab.url).hostname;
+                console.log("Whitelisting:", hostname);
+
+                whitelistBtn.disabled = true;
+                whitelistBtn.textContent = "Adding...";
+
+                const response = await browserAPI.runtime.sendMessage({
+                    action: "addToWhitelist",
+                    domain: hostname
+                });
+
+                console.log("Whitelist response:", response);
+
+                if (response && response.success) {
+                    alert(`${hostname} added to whitelist`);
+                    window.close();
+                } else {
+                    throw new Error(response?.error || "Failed to whitelist");
+                }
+            } catch (e) {
+                console.error("Whitelist error:", e);
+                alert("Failed to whitelist: " + e.message);
+                whitelistBtn.disabled = false;
+                whitelistBtn.textContent = "Trust";
+            }
+        };
+    }
+
+    // Blacklist button
+    const blacklistBtn = document.getElementById('blacklistBtn');
+    if (blacklistBtn) {
+        blacklistBtn.onclick = async () => {
+            console.log("Blacklist clicked");
+            
+            if (!currentTab || !currentTab.url) {
+                alert("No tab URL available");
+                return;
+            }
+
+            try {
+                const hostname = new URL(currentTab.url).hostname;
+
+                if (!confirm(`Block ${hostname}?\n\nThis site will be blocked on all future visits.`)) {
+                    return;
+                }
+
+                console.log("Blacklisting:", hostname);
+
+                blacklistBtn.disabled = true;
+                blacklistBtn.textContent = "Blocking...";
+
+                const response = await browserAPI.runtime.sendMessage({
+                    action: "addToBlacklist",
+                    domain: hostname
+                });
+
+                console.log("Blacklist response:", response);
+
+                if (response && response.success) {
+                    await browserAPI.tabs.reload(currentTab.id);
+                    window.close();
+                } else {
+                    throw new Error(response?.error || "Failed to blacklist");
+                }
+            } catch (e) {
+                console.error("Blacklist error:", e);
+                alert("Failed to blacklist: " + e.message);
+                blacklistBtn.disabled = false;
+                blacklistBtn.textContent = "Block";
+            }
+        };
+    }
+}
+
+// ============================================
+// UTILITIES
+// ============================================
+
+function escapeHtml(text) {
+    if (typeof text !== 'string') return String(text);
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// ============================================
+// RADAR ANIMATION
+// ============================================
+
+class RadarScope {
+    constructor(canvasId) {
+        this.canvas = document.getElementById(canvasId);
+        if (!this.canvas) {
+            console.error("Canvas not found:", canvasId);
+            return;
+        }
+
+        this.ctx = this.canvas.getContext('2d');
+        this.angle = 0;
+        this.risk = 0;
+        this.animationFrame = null;
+
+        // Setup canvas
+        const dpr = window.devicePixelRatio || 1;
+        const rect = this.canvas.getBoundingClientRect();
+        this.canvas.width = rect.width * dpr;
+        this.canvas.height = rect.height * dpr;
+        this.ctx.scale(dpr, dpr);
+        this.width = rect.width;
+        this.height = rect.height;
+        this.cx = this.width / 2;
+        this.cy = this.height / 2;
+
+        console.log("Radar initialized");
+    }
+
+    setRiskLevel(score) {
+        this.risk = Math.max(0, Math.min(100, score));
+        console.log("Radar risk level:", this.risk);
+    }
+
+    start() {
+        if (this.canvas && !this.animationFrame) {
+            this.animate();
+        }
+    }
+
+    stop() {
+        if (this.animationFrame) {
+            cancelAnimationFrame(this.animationFrame);
+            this.animationFrame = null;
+        }
+    }
+
+    animate() {
+        if (!this.ctx) return;
+
+        const ctx = this.ctx;
+        const cx = this.cx;
+        const cy = this.cy;
+        const radius = Math.min(cx, cy) - 10;
+
+        // Clear canvas
+        ctx.clearRect(0, 0, this.width, this.height);
+
+        // Determine color based on risk
+        let color = '0, 255, 157'; // Green
+        if (this.risk >= 50) {
+            color = '255, 59, 59'; // Red
+        } else if (this.risk >= 20) {
+            color = '255, 179, 0'; // Orange
+        }
+
+        // Draw concentric circles
+        ctx.strokeStyle = `rgba(${color}, 0.2)`;
+        ctx.lineWidth = 1;
+
+        [0.3, 0.6, 0.9].forEach(scale => {
+            ctx.beginPath();
+            ctx.arc(cx, cy, radius * scale, 0, Math.PI * 2);
+            ctx.stroke();
+        });
+
+        // Draw crosshairs
+        ctx.beginPath();
+        ctx.moveTo(cx, cy - radius);
+        ctx.lineTo(cx, cy + radius);
+        ctx.moveTo(cx - radius, cy);
+        ctx.lineTo(cx + radius, cy);
+        ctx.stroke();
+
+        // Draw sweep line
+        this.angle += 0.03;
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(this.angle);
+
+        // Sweep gradient
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.arc(0, 0, radius, 0, 0.4);
+        ctx.lineTo(0, 0);
+        ctx.closePath();
+        ctx.fillStyle = `rgba(${color}, 0.1)`;
+        ctx.fill();
+
+        // Sweep line
+        ctx.strokeStyle = `rgba(${color}, 1)`;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(radius, 0);
+        ctx.stroke();
+
+        ctx.restore();
+
+        // Draw blips for threats
+        if (this.risk > 0 && Math.random() > 0.95) {
+            const angle = Math.random() * Math.PI * 2;
+            const dist = Math.random() * radius * 0.8;
+            const bx = cx + Math.cos(angle) * dist;
+            const by = cy + Math.sin(angle) * dist;
+            
+            ctx.fillStyle = `rgba(${color}, 0.8)`;
+            ctx.beginPath();
+            ctx.arc(bx, by, 2, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // Continue animation
+        this.animationFrame = requestAnimationFrame(() => this.animate());
+    }
+}
+
+console.log("Popup script loaded");
