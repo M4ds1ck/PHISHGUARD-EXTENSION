@@ -1,8 +1,7 @@
 {
-  "version": "6.1.0",
-  "lastUpdated": "2025-12-20",
+  "version": "7.0.0",
+  "lastUpdated": "2026-02-07",
   "description": "PhishGuard detection rules and configuration database",
-  
   "suspiciousTLDs": {
     "high_risk": [
       "tk", "ml", "ga", "cf", "gq", "xyz", "top", "work", "click",
@@ -16,7 +15,6 @@
     ],
     "notes": "TLDs commonly used in phishing campaigns due to low cost and lax verification"
   },
-  
   "trustedBrands": {
     "financial": [
       "paypal", "stripe", "square", "venmo", "cashapp",
@@ -50,7 +48,6 @@
     ],
     "notes": "Legitimate brand names frequently targeted for impersonation"
   },
-  
   "suspiciousKeywords": {
     "urgent_action": [
       "verify", "confirm", "urgent", "immediately", "action-required",
@@ -74,7 +71,6 @@
     ],
     "notes": "Keywords commonly used in phishing URLs and content"
   },
-  
   "urlShorteners": [
     "bit.ly", "tinyurl.com", "goo.gl", "t.co", "ow.ly", "is.gd",
     "buff.ly", "adf.ly", "bl.ink", "lnkd.in", "shorte.st", "mcaf.ee",
@@ -83,7 +79,6 @@
     "filoops.info", "vurl.com", "2.gp", "twitthis.com", "htxt.it",
     "budurl.com", "short.ie", "win.gs", "atu.ca", "rb.gy"
   ],
-  
   "homographCharacters": {
     "description": "Characters that look similar but are from different alphabets (IDN homograph attacks)",
     "cyrillic": {
@@ -96,7 +91,6 @@
     },
     "notes": "Used to create visually identical but technically different domain names"
   },
-  
   "scoreWeights": {
     "critical": {
       "min": 50,
@@ -137,19 +131,16 @@
       ]
     }
   },
-  
   "whitelist": {
     "description": "Domains that should never be flagged (user-configurable)",
     "default": [],
     "notes": "Users can add trusted domains through the extension UI"
   },
-  
   "blacklist": {
     "description": "Domains that should always be flagged (user-configurable)",
     "default": [],
     "notes": "Users can add known malicious domains through the extension UI"
   },
-  
   "regexPatterns": {
     "ipv4": "^(\\d{1,3}\\.){3}\\d{1,3}$",
     "ipv6": "^([0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}$",
@@ -158,7 +149,6 @@
     "dataUri": "^data:",
     "notes": "Regular expressions for pattern matching"
   },
-  
   "apiEndpoints": {
     "phishtank": {
       "url": "https://checkurl.phishtank.com/checkurl/",
@@ -171,16 +161,8 @@
       "method": "POST",
       "requiresKey": true,
       "documentation": "https://developers.google.com/safe-browsing/v4"
-    },
-    "virusTotal": {
-      "url": "https://www.virustotal.com/vtapi/v2/url/report",
-      "method": "GET",
-      "requiresKey": true,
-      "documentation": "https://developers.virustotal.com/reference",
-      "notes": "Optional future integration"
     }
   },
-  
   "configuration": {
     "autoScan": true,
     "scanDelay": 1000,
@@ -188,14 +170,15 @@
     "apiTimeout": 5000,
     "maxReasons": 20,
     "enableNotifications": false,
+    "requireConsentForAPIs": true,
+    "requireConsentForURLExpansion": true,
     "notes": "Default configuration values (in milliseconds where applicable)"
   },
-  
   "thresholds": {
     "safe": {
       "max": 24,
       "color": "#00ff9d",
-      "badge": ""
+      "badge": " "
     },
     "suspicious": {
       "min": 25,
@@ -215,12 +198,10 @@
       "badge": "!!!"
     }
   },
-  
-  "metadata": {
-    "author": "PhishGuard Team",
-    "license": "MIT",
-    "repository": "https://github.com/yourusername/phishguard",
-    "supportEmail": "support@phishguard.example.com",
-    "updateUrl": "https://api.phishguard.example.com/rules/latest.json"
+  "privacyPolicy": {
+    "version": "2.0",
+    "lastUpdated": "2026-02-07",
+    "summary": "PhishGuard never stores your browsing history. External API checks require explicit consent. URL expansion is opt-in. All data stays on your device.",
+    "url": "https://phishguard.deepsea.com/privacy"
   }
 }

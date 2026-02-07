@@ -1,21 +1,19 @@
 {
   "manifest_version": 2,
   "name": "PhishGuard DeepSea",
-  "version": "2.1.0",
+  "version": "3.0.0",
   "description": "Advanced phishing protection with deep sea sonar technology - Firefox optimized",
-
   "permissions": [
     "tabs",
     "storage",
     "webNavigation",
+    "notifications",
     "<all_urls>"
   ],
-
   "background": {
     "scripts": ["background.js"],
     "persistent": false
   },
-
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
@@ -24,7 +22,6 @@
       "all_frames": false
     }
   ],
-
   "browser_action": {
     "default_popup": "popup.html",
     "default_title": "PhishGuard Protection",
@@ -34,19 +31,19 @@
       "128": "icons/icon128.png"
     }
   },
-
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
-
   "web_accessible_resources": [
     "warning.html"
   ],
-
   "content_security_policy": "script-src 'self'; object-src 'self'",
-
   "browser_specific_settings": {
     "gecko": {
       "id": "phishguard@deepsea.com",
